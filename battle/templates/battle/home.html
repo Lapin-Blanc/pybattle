@@ -24,7 +24,7 @@
     <ul class="rooms">
         {% for room in rooms %}
         <li class="room-link" room-url="{% url 'battle:join_room' room.id %}">
-            {{ room.battle.title }} 
+            {{ room.game }} 
             {{ room.player_one|default_if_none:"" }} 
             {{ room.player_two|default_if_none:"" }}
         </li>

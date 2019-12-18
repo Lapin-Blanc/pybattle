@@ -56,13 +56,13 @@ body {
 
 /* Left and right column */
 .column.side {
-  width: 15%;
+/*  width: 15%;*/
   background-color: white;
 }
 
 /* Middle column */
 .column.middle {
-  width: 70%;
+/*  width: 70%;*/
   background-color: rgb(153, 153, 153);
 }
 
@@ -103,7 +103,9 @@ ul.games {
         background: #5898D9;
         border: 1px solid #35485C;
     }
-
+#chats {
+  width: 700px;
+}
     #chats .room {
         border: 1px solid rgb(255, 255, 255);
         padding: 5px;
@@ -115,7 +117,7 @@ ul.games {
         font-weight: bold;
     }
     #chats .messages {
-        height: 350px;
+        height: 500px;
         overflow: auto;
         background: rgb(253, 252, 230);
         margin: 2px 0 5px 0;
@@ -155,4 +157,16 @@ ul.games {
     border: 1px solid #bcd;
     border-radius: 2px;
     cursor: pointer;
+}
+
+.button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  padding: 15px 30px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  cursor: pointer;
 }
