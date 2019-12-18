@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Accueil - Lobby{% endblock %}
+
+{% block header_text %}Accueil{% endblock %}
+
+{% block column_left %}
+    <p>Créer une partie</p>
+    <ul class="games">
+        {% for game in games %}
+        <li class="game-link" game-url="{% url 'battle:create_room' game.id %}">{{ game }}</li>
+        {% empty %}
+        <p class="empty">Pas de jeu défini, créez en un via <a href="{% url 'admin:index' %}">l'administration</a> du site
+        </p>
+        {% endfor %}
+{% endblock %}
+
+{% block column_middle %}
+    <div id="chats"></div>
+{% endblock %}
+
+{% block column_right %}
+    <p>Rejoindre une partie</p>
+    <ul class="rooms">
+        {% for room in rooms %}
+        <li class="room-link" room-url="{% url 'battle:join_room' room.id %}">
+            {{ room.battle.title }} 
+            {{ room.player_one|default_if_none:"" }} 
+            {{ room.player_two|default_if_none:"" }}
+        </li>
+        {% empty %}
+        <p class="empty">Pas de partie disponible en ce moment...</p>
+        {% endfor %}
+    </ul>
+{% endblock %}
+
+
+{% block extra_body %}
+<script>
+    $(function () {
+        // Correctly decide between ws:// and wss://
+        var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
+        var ws_path = ws_scheme + '://' + window.location.host + "/chat/stream/";
+        console.log("Connecting to " + ws_path);
+        var socket = new ReconnectingWebSocket(ws_path);
+        socket.onopen = function () {
+            socket.send(JSON.stringify({
+                "command": "join",
+                "room": "Lobby"
+            }));
+            console.log("Connected to lobby");
+        };
+        socket.onclose = function () {
+            console.log("Disconnected from chat lobby");
+        };
+   
+        // Handle incoming messages
+        socket.onmessage = function (message) {
+            // Decode the JSON
+            console.log("Got websocket message " + message.data);
+            var data = JSON.parse(message.data);
+            
+            // Handle errors
+            if (data.error) {
+                alert(data.error);
+                return;
+            };
+                // Handle joining
+                if (data.join) {
+                    console.log("Joining " + data.join);
+                    var chatdiv = $(
+                            "<div class='game' id='room-" + data.join + "'>" +
+                            "<h2>" + data.title + "</h2>" +
+                            "<div class='messages'></div>" +
+                            "<form><input><button>Send</button></form>" +
+                            "</div>"
+                    );
+                    // Hook up send button to send a message
+                    chatdiv.find("form").on("submit", function () {
+                        socket.send(JSON.stringify({
+                            "command": "send",
+                            "room": data.join,
+                            "message": chatdiv.find("input").val()
+                        }));
+                        chatdiv.find("input").val("");
+                        return false;
+                    });
+                    $("#chats").append(chatdiv);
+            
+                } else if (data.message || data.msg_type != 0) {
+                var msgdiv = $("#room-" + data.room + " .messages");
+                var ok_msg = "";
+                // msg types are defined in chat/settings.py
+                switch (data.msg_type) {
+                    case 0:
+                        // Message
+                        ok_msg = "<div class='message'>" +
+                                "<span class='username'>" + data.username + " : </span>" +
+                                "<span class='body'>" + data.message + "</span>" +
+                                "</div>";
+                        break;
+                    case 1:
+                        // Warning / Advice messages
+                        ok_msg = "<div class='contextual-message text-warning'>" + data.message +
+                                "</div>";
+                        break;
+                    case 2:
+                        // Alert / Danger messages
+                        ok_msg = "<div class='contextual-message text-danger'>" + data.message +
+                                "</div>";
+                        break;
+                    case 3:
+                        // "Muted" messages
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.message +
+                                "</div>";
+                        break;
+                    case 4:
+                        // User joined Lobby
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.username +
+                                " a rejoint le salon" +
+                                "</div>";
+                        break;
+                    case 5:
+                        // User left Lobby
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.username +
+                                " a quitté le salon" +
+                                "</div>";
+                        break;
+                    case 6:
+                        // Updating lobby
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.username +
+                                " a rejoint/quitté une partie" +
+                                "</div>";
+                        $('.rooms').html(data.rooms_list);
+                        $('.room-link').click(function () {
+                            if ($(this).html().includes("{{ user.username }}")) {
+                                alert('Vous êtes déjà inscrit à cette partie');
+                            } else {
+                                window.open($(this).attr('room-url'), '_blank');
+                            };
+                        });
+                        break;
+                    default:
+                        console.log("Unsupported message type!");
+                        return;
+                };
+                msgdiv.append(ok_msg);
+                msgdiv.scrollTop(msgdiv.prop("scrollHeight"));
+            } else {
+                    console.log("Cannot handle message!");
+            };
+        };
+
+        // Open new tab for this game, creating a new Room
+        $('.game-link').click(function() {
+            window.open($(this).attr('game-url'), '_blank');
+        });
+        // Same for started game
+        $('.room-link').click(function() {
+            if ($(this).html().includes("{{ user.username }}")) {
+                alert('Vous êtes déjà inscrit à cette partie');
+            } else {
+                window.open($(this).attr('room-url'), '_blank');
+            };
+        });
+    });
+</script>
+{% endblock %}

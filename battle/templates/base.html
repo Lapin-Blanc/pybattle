@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+
+{% load static %}
+
+<html>
+<head>
+    <title>{% block title %}{% endblock %}</title>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'battle/img/favicon-32x32.png' %}">
+	<link rel="stylesheet" href="{% static 'battle/css/style.css' %}" type="text/css" media="screen" />
+ 	<script src="{% static 'battle/js/jquery-1.12.2.min.js' %}" type="text/javascript"></script>
+	<script src="{% static 'battle/js/reconnecting-websocket.min.js' %}" type="text/javascript"></script>
+	{% block extra_head %}{% endblock %}
+</head>
+<body>
+	<div class="header">
+		{% if user.is_authenticated %}
+		<a id="logout" href="{% url 'logout' %}">Déconnexion</a>
+		{% endif %}
+		<h2>{% block header_text %}{% endblock %}</h2>
+	</div>
+	
+	<div class="row">
+		<div class="column side">{% block column_left %}{% endblock %}</div>
+		<div class="column middle">{% block column_middle %}{% endblock %}</div>
+		<div class="column side">{% block column_right %}{% endblock %}</div>
+	</div>
+
+	<div class="footer">{% block footer %}{% endblock %}</div>
+		
+		
+
+	{% block extra_body %}{% endblock %}
+</body>
+</html>

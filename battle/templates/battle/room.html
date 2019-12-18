@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Room{% endblock %}
+
+
+{% block header_text %}
+    {{ room.game.title|title }} - 
+    <span id="player-1">{{ room.player_one|default_if_none:"" }}</span>
+    <span id="player-2">{{ room.player_two|default_if_none:"" }}</span>
+    <ul class="room">
+        <li class="leave">Quitter la partie</li>
+    </ul>
+{% endblock %}
+
+{% block column_left %}
+
+{% endblock %}
+
+{% block column_middle %}
+    <div id="chats"></div>
+{% endblock %}
+
+{% block column_right %}
+
+{% endblock %}
+
+{% block footer %}
+
+{% endblock %}
+
+
+{% block content %}
+{% endblock %}
+
+
+{% block extra_body %}
+<script>
+    $(function () {
+        // Correctly decide between ws:// and wss://
+        var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
+        var ws_path = ws_scheme + '://' + window.location.host + "/chat/stream/";
+        console.log("Connecting to " + ws_path);
+        var socket = new ReconnectingWebSocket(ws_path);
+        $('li.leave').click(function() {
+            socket.send(JSON.stringify({
+                "command": "leave",
+                "room": "{{ room.id }}"
+            }));
+        });
+        socket.onopen = function () {
+            socket.send(JSON.stringify({
+                "command": "join",
+                "room": "{{ room.id }}"
+            }));
+            console.log("Connected to room {{ room.id }}" );
+        };
+        socket.onclose = function () {
+            console.log("Disconnected from room {{ room.id }}");
+        };
+
+        // Handle incoming messages
+        socket.onmessage = function (message) {
+            // Decode the JSON
+            console.log("Got websocket message " + message.data);
+            var data = JSON.parse(message.data);
+
+            // Handle errors
+            if (data.error) {
+                alert(data.error);
+                return;
+            };
+            // Handle joining
+            if (data.join) {
+                console.log("Joining lobby " + data.join);
+                var chatdiv = $(
+                    "<div class='game' id='room-" + data.join + "'>" +
+                    "<h2>" + "Chat" + "</h2>" +
+                    "<div class='messages'></div>" +
+                    "<form><input><button>Send</button></form>" +
+                    "</div>"
+                );
+                // Hook up send button to send a message
+                chatdiv.find("form").on("submit", function () {
+                    socket.send(JSON.stringify({
+                        "command": "send",
+                        "room": data.join,
+                        "message": chatdiv.find("input").val()
+                    }));
+                    chatdiv.find("input").val("");
+                    return false;
+                });
+                $("#chats").append(chatdiv);
+
+            } else if (data.leave) {
+                console.log("Leaving game " + data.leave);
+                close();
+                return false;
+            } else if (data.message || data.msg_type != 0) {
+                var msgdiv = $("#room-" + data.room + " .messages");
+                var ok_msg = "";
+                // msg types are defined in chat/settings.py
+                switch (data.msg_type) {
+                    case 0:
+                        // Message
+                        ok_msg = "<div class='message'>" +
+                            "<span class='username'>" + data.username + " : </span>" +
+                            "<span class='body'>" + data.message + "</span>" +
+                            "</div>";
+                        break;
+                    case 1:
+                        // Warning / Advice messages
+                        ok_msg = "<div class='contextual-message text-warning'>" + data.message +
+                            "</div>";
+                        break;
+                    case 2:
+                        // Alert / Danger messages
+                        ok_msg = "<div class='contextual-message text-danger'>" + data.message +
+                            "</div>";
+                        break;
+                    case 3:
+                        // "Muted" messages
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.message +
+                            "</div>";
+                        break;
+                    case 4:
+                        // User joined Lobby
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.username +
+                            " a rejoint le salon" +
+                            "</div>";
+                        break;
+                    case 5:
+                        // User left Lobby
+                        ok_msg = "<div class='contextual-message text-muted'>" + data.username +
+                            " a quitté le salon" +
+                            "</div>";
+                        break;
+                    default:
+                        console.log("Unsupported message type!");
+                        return;
+                };
+                msgdiv.append(ok_msg);
+                msgdiv.scrollTop(msgdiv.prop("scrollHeight"));
+            } else {
+                console.log("Cannot handle message!");
+            };
+        };
+
+    });
+</script>
+{% endblock %}
