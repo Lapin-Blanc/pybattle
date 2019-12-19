@@ -47,6 +47,8 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
                 self.send_room(content["room"], content["message"])
             elif command == "leave":
                 self.leave_room(content["room"])
+            elif command == "send_code":
+                self.send_code(content["room"], content["message"])
         except ClientError as e:
             # Catch any errors and send it back
             self.send_json({"error": e.code})
@@ -168,6 +170,24 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
             }
         )
 
+    def send_code(self, room_id, message):
+        """
+        Called by receive_json when someone sends a message to a room.
+        """
+        # Check they are in this room
+        if room_id not in self.rooms:
+            raise ClientError("ROOM_ACCESS_DENIED : " + str(self.rooms) + " " + str(room_id))
+        # Get the room and send to the group about it
+        room = get_room_or_error(room_id, self.scope["user"])
+        async_to_sync(self.channel_layer.group_send)(
+            room.group_name,
+            {
+                "type": "chat.code",
+                "room_id": room_id,
+                "username": self.scope["user"].username,
+                "message": message,
+            }
+        )
     ##### Handlers for messages sent over the channel layer
 
     # These helper methods are named by the types we send - so chat.join becomes chat_join
@@ -216,7 +236,7 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
         """
         Called when someone has messaged our chat.
         """
-        # Send a message down to the client
+        # Send a workspace XML down to the client
         if not self.scope["user"].username == event["username"]:
             self.send_json(
                 {

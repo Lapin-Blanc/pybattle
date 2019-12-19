@@ -13,8 +13,6 @@
     <script src="{% static 'battle/js/blockly/custom_blocks.js' %}"></script>
     <script src="{% static 'battle/js/blockly/custom_generators.js' %}"></script>
     
-    <script src="{% static 'battle/js/html2canvas.min.js' %}"></script>
-    <script src="{% static 'battle/js/screenshot.js' %}"></script>
 {% endblock %}
 
 {% block header_text %}
@@ -32,14 +30,15 @@
 {% endblock %}
 
 {% block column_middle %}
-    <div id="chats"></div>
 {% endblock %}
 
 {% block column_right %}
+<div id="opponentBlocklyDiv" style="height: 600px; width: 600px;"></div>
 
 {% endblock %}
 
 {% block footer %}
+    <div id="chats"></div>
 
 {% endblock %}
 
@@ -66,13 +65,12 @@
             }));
         });
         $('#show-code').click(function() {
-            getBlocklyScreenshot().then(function(img) {
+                console.log('sending code' + Blockly.Xml.workspaceToDom(workspace));
                 socket.send(JSON.stringify({
-                    "command": "send",
+                    "command": "send_code",
                     "room": "{{ room.id }}",
-                    "message": "<br>" + img.outerHTML
+                    "message": Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace))
                 }));
-            });
         });
         socket.onopen = function () {
             socket.send(JSON.stringify({
@@ -161,6 +159,15 @@
                             " a quitté le salon" +
                             "</div>";
                         break;
+                    case 7:
+                        // Receive opponent's workspace update
+                        // ok_msg = "<div class='contextual-message text-muted'>" + data.username +
+                        //     " a quitté le salon" +
+                        //     "</div>";
+                        //console.log(data.message);
+                        opponentWorkspace.clear();
+                        Blockly.Xml.domToWorkspace(Blockly.Xml.textToDom(data.message), opponentWorkspace);
+                        break;
                     default:
                         console.log("Unsupported message type!");
                         return;
@@ -177,10 +184,21 @@
                 zoom: {startScale : 0.8}
             });
         function myUpdateFunction(event) {
-            my_code = Blockly.JavaScript.workspaceToCode(workspace);
-            console.log(my_code);
+            if (event.type != Blockly.Events.UI && event.type != Blockly.Events.CREATE) {
+                my_code = Blockly.JavaScript.workspaceToCode(workspace);
+                socket.send(JSON.stringify({
+                    "command": "send_code",
+                    "room": "{{ room.id }}",
+                    "message": Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace))
+                }));
+            }
         }
         workspace.addChangeListener(myUpdateFunction);
+        var opponentWorkspace = Blockly.inject('opponentBlocklyDiv',
+            {
+                //toolbox: document.getElementById('myToolbox'),
+                zoom: { startScale: 0.8 }
+            });
     });
 </script>
 <xml id="myToolbox" style="display: none">
