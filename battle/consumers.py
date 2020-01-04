@@ -34,6 +34,7 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
 
     def receive_json(self, content):
         """
+        MAIN DISPATCHER
         Called when we get a text frame. Channels will JSON-decode the payload
         for us and pass it as the first argument.
         """
@@ -47,6 +48,10 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
                 self.send_room(content["room"], content["message"])
             elif command == "leave":
                 self.leave_room(content["room"])
+            elif command == "share":
+                self.share(content["room"], content["message"])            
+            elif command == "send_workspace":
+                self.send_workspace(content["room"], content["message"])
             elif command == "send_code":
                 self.send_code(content["room"], content["message"])
         except ClientError as e:
@@ -170,6 +175,43 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
             }
         )
 
+    def share(self, room_id, message):
+        """
+        Called by receive_json when someone enable workspace sharing.
+        """
+        # Check they are in this room
+        if room_id not in self.rooms:
+            raise ClientError("ROOM_ACCESS_DENIED : " + str(self.rooms) + " " + str(room_id))
+        # Get the room and send to the group about it
+        room = get_room_or_error(room_id, self.scope["user"])
+        async_to_sync(self.channel_layer.group_send)(
+            room.group_name,
+            {
+                "type": "share.workspace",
+                "room_id": room_id,
+                "username": self.scope["user"].username,
+                "message": message,
+            }
+        )
+    def send_workspace(self, room_id, message):
+        """
+        Called by receive_json when someone sends a workspace to a room.
+        """
+        # Check they are in this room
+        if room_id not in self.rooms:
+            raise ClientError("ROOM_ACCESS_DENIED : " + str(self.rooms) + " " + str(room_id))
+        # Get the room and send to the group about it
+        room = get_room_or_error(room_id, self.scope["user"])
+        async_to_sync(self.channel_layer.group_send)(
+            room.group_name,
+            {
+                "type": "chat.workspace",
+                "room_id": room_id,
+                "username": self.scope["user"].username,
+                "message": message,
+            }
+        )
+    
     def send_code(self, room_id, message):
         """
         Called by receive_json when someone sends a message to a room.
@@ -232,7 +274,37 @@ class ChatRoomConsumer(JsonWebsocketConsumer):
             },
         )
 
+    def share_workspace(self, event):
+        """
+        Called when someone shares his workspace.
+        """
+        # Send a workspace XML down to the client
+        if not self.scope["user"].username == event["username"]:
+            self.send_json(
+                {
+                    "msg_type": settings.MSG_TYPE_SHARE,
+                    "room": event["room_id"],
+                    "username": event["username"],
+                    "message": event["message"],
+                },
+            )
+
     def chat_code(self, event):
+        """
+        Called when someone has messaged our chat.
+        """
+        # Send a workspace XML down to the client
+        if not self.scope["user"].username == event["username"]:
+            self.send_json(
+                {
+                    "msg_type": settings.MSG_TYPE_CODE,
+                    "room": event["room_id"],
+                    "username": event["username"],
+                    "message": event["message"],
+                },
+            )
+
+    def chat_workspace(self, event):
         """
         Called when someone has messaged our chat.
         """

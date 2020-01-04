@@ -41,3 +41,6 @@ def join_room(request, room_id):
 def room(request, room_id):
     room = get_object_or_404(Room, pk=room_id)
     return render(request, 'battle/room.html', {'room': room})
+
+def battle(request):
+    return render(request, 'battle.html')

@@ -13,6 +13,7 @@
     <script src="{% static 'battle/js/blockly/custom_blocks.js' %}"></script>
     <script src="{% static 'battle/js/blockly/custom_generators.js' %}"></script>
     
+    <script type="text/javascript" src="{% static 'battle/js/jsbattle.min.js' %}"></script>
 {% endblock %}
 
 {% block header_text %}
@@ -26,19 +27,62 @@
 
 {% block column_left %}
 <div id="blocklyDiv" style="height: 600px; width: 600px;"></div>
+<div id="share-workspace" class="button">Partager l'espace de travail</div>
 <div id="show-code" class="button">Show code</div>
+<div id="run-code" class="button">Run code</div>
+
 {% endblock %}
 
 {% block column_middle %}
+
+<!-- The Modal -->
+<div id="myModal" class="modal">
+
+    <!-- Modal content -->
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <p>Some text in the Modal..</p>
+        <canvas id="battlefield" style="width: 900px; height: 600px"></canvas>
+    </div>
+
+</div>
+<script>
+    // Get the modal
+    var modal = document.getElementById("myModal");
+
+    // Get the button that opens the modal
+    // var btn = document.getElementById("myBtn");
+
+    // Get the <span> element that closes the modal
+    var span = document.getElementsByClassName("close")[0];
+
+    // // When the user clicks the button, open the modal 
+    // btn.onclick = function () {
+    //     modal.style.display = "block";
+    // }
+
+    // When the user clicks on <span> (x), close the modal
+    span.onclick = function () {
+        modal.style.display = "none";
+    }
+
+    // When the user clicks anywhere outside of the modal, close it
+    window.onclick = function (event) {
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+</script>
+
+    <div id="chats"></div>
 {% endblock %}
 
 {% block column_right %}
-<div id="opponentBlocklyDiv" style="height: 600px; width: 600px;"></div>
+<div id="opponentBlocklyDiv" style="height: 600px; width: 600px; display:none;"></div>
 
 {% endblock %}
 
 {% block footer %}
-    <div id="chats"></div>
 
 {% endblock %}
 
@@ -51,27 +95,27 @@
 <script>
 
     $(function () {
+        var assetsLoaded = false;
+        var shareWorkspace = false;
+        var sharingWorkspace = false;
+        var enableWorkspaceControl = false;
+        var opponentWorkspace;
         var my_code;
+        var his_code = `
+importScripts('lib/tank.js');
+tank.init(function(settings, info) {
 
+})
+tank.loop(function(state, control) {
+  control.THROTTLE = 1;
+});`;
+        // Socket management
         // Correctly decide between ws:// and wss://
         var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
         var ws_path = ws_scheme + '://' + window.location.host + "/chat/stream/";
         console.log("Connecting to " + ws_path);
         var socket = new ReconnectingWebSocket(ws_path);
-        $('li.leave').click(function() {
-            socket.send(JSON.stringify({
-                "command": "leave",
-                "room": "{{ room.id }}"
-            }));
-        });
-        $('#show-code').click(function() {
-                console.log('sending code' + Blockly.Xml.workspaceToDom(workspace));
-                socket.send(JSON.stringify({
-                    "command": "send_code",
-                    "room": "{{ room.id }}",
-                    "message": Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace))
-                }));
-        });
+        
         socket.onopen = function () {
             socket.send(JSON.stringify({
                 "command": "join",
@@ -133,9 +177,30 @@
                             "</div>";
                         break;
                     case 1:
-                        // Warning / Advice messages
-                        ok_msg = "<div class='contextual-message text-warning'>" + data.message +
-                            "</div>";
+                        // Enable workspace sharing
+                        if (!shareWorkspace) {
+                            shareWorkspace = true;
+                            
+                            ok_msg = "<div class='contextual-message text-warning'>" + data.username +
+                                " partage son espace de travail</div>";
+                            $('#opponentBlocklyDiv').css('display', 'block');
+                            // Creates and populate opponent's workspace with base element
+                            if (!opponentWorkspace) {
+                                opponentWorkspace = Blockly.inject('opponentBlocklyDiv',
+                                    {
+                                        toolbox: document.getElementById('myToolbox'),
+                                        zoom: { startScale: 0.8 }
+                                    });                            
+                            }
+                            Blockly.Xml.domToWorkspace(Blockly.Xml.textToDom(data.message), opponentWorkspace);
+                        } else {
+                            shareWorkspace = false;
+                            
+                            ok_msg = "<div class='contextual-message text-warning'>" + data.username +
+                                " ne partage plus son espace de travail</div>";
+                            opponentWorkspace.clear();
+                            $('#opponentBlocklyDiv').css('display', 'none');
+                        };
                         break;
                     case 2:
                         // Alert / Danger messages
@@ -159,12 +224,7 @@
                             " a quitté le salon" +
                             "</div>";
                         break;
-                    case 7:
-                        // Receive opponent's workspace update
-                        // ok_msg = "<div class='contextual-message text-muted'>" + data.username +
-                        //     " a quitté le salon" +
-                        //     "</div>";
-                        //console.log(data.message);
+                    case 8:
                         opponentWorkspace.clear();
                         Blockly.Xml.domToWorkspace(Blockly.Xml.textToDom(data.message), opponentWorkspace);
                         break;
@@ -178,27 +238,98 @@
                 console.log("Cannot handle message!");
             };
         };
+        
+        // Misc hookup functions
+        $('li.leave').click(function () {
+            socket.send(JSON.stringify({
+                "command": "leave",
+                "room": "{{ room.id }}"
+            }));
+        });
+        
+        $('#share-workspace').click(function () {
+            var xml = Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace));
+            if (!sharingWorkspace) {
+                sharingWorkspace = true;
+                $('#share-workspace').text("Arrêter le partage");
+            } else {
+                sharingWorkspace = false;
+                $('#share-workspace').text("Partager l'espace de travail");
+            };
+            console.log('sharing workspace' + xml);
+            socket.send(JSON.stringify({
+                "command": "share",
+                "room": "{{ room.id }}",
+                "message": xml
+            }));
+        });
+        
+        $('#show-code').click(function () {
+            console.log('sending code' + Blockly.Xml.workspaceToDom(workspace));
+            socket.send(JSON.stringify({
+                "command": "send_code",
+                "room": "{{ room.id }}",
+                "message": Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace))
+            }));
+        });
+        $('#run-code').click(function () {
+            console.log(my_code);
+            console.log(his_code);
+            var canvas = document.getElementById('battlefield');
+            var renderer = JsBattle.createRenderer("brody");
+            var simulation;
+            renderer.init(canvas);
+            if (!assetsLoaded) {
+                renderer.loadAssets(() => {
+                    assetsLoaded = true;
+                    simulation = JsBattle.createSimulation(renderer);
+                    simulation.init(900, 600);
+                    var ai = JsBattle.createAiDefinition();
+                    ai.fromCode('me', my_code);
+                    simulation.addTank(ai);
+                    ai = JsBattle.createAiDefinition();
+                    ai.fromCode('him', his_code);
+                    simulation.addTank(ai);
+                    simulation.start();
+                }, '/static/battle/');
+            } else {
+                simulation = JsBattle.createSimulation(renderer);
+                simulation.init(900, 600);
+                var ai = JsBattle.createAiDefinition();
+                ai.fromCode('me', my_code);
+                simulation.addTank(ai);
+                ai = JsBattle.createAiDefinition();
+                ai.fromCode('him', his_code);
+                simulation.addTank(ai);
+                simulation.start();
+            };
+            $('#myModal').css('display', 'block');
+
+        });
+
+        // Blockly workspace management
+        // Initialize and populates my workspace
         var workspace = Blockly.inject('blocklyDiv',
             { 
                 toolbox: document.getElementById('myToolbox'),
                 zoom: {startScale : 0.8}
             });
+        Blockly.Xml.domToWorkspace(Blockly.Xml.textToDom('<xml><block type="simulation_loop" id="initial_loop" x="36" y="32" deletable="false" movable="false"></block></xml>'), workspace);
         function myUpdateFunction(event) {
             if (event.type != Blockly.Events.UI && event.type != Blockly.Events.CREATE) {
                 my_code = Blockly.JavaScript.workspaceToCode(workspace);
-                socket.send(JSON.stringify({
-                    "command": "send_code",
-                    "room": "{{ room.id }}",
-                    "message": Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace))
-                }));
-            }
-        }
+                if (shareWorkspace) {
+                    socket.send(JSON.stringify({
+                        "command": "send_workspace",
+                        "room": "{{ room.id }}",
+                        "message": Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace))
+                    }));
+                };
+            };
+            console.log('Updating my code : ' + my_code);
+        };
         workspace.addChangeListener(myUpdateFunction);
-        var opponentWorkspace = Blockly.inject('opponentBlocklyDiv',
-            {
-                //toolbox: document.getElementById('myToolbox'),
-                zoom: { startScale: 0.8 }
-            });
+        
     });
 </script>
 <xml id="myToolbox" style="display: none">
